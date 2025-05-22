@@ -18,51 +18,81 @@ class ASLTranslator:
         
         # Custom Vision setup
         print("Setting up Custom Vision...")
-        prediction_credentials = ApiKeyCredentials(in_headers={"Prediction-key": config.PREDICTION_KEY})
-        self.predictor = CustomVisionPredictionClient(config.ENDPOINT, prediction_credentials)
+        try:
+            prediction_credentials = ApiKeyCredentials(in_headers={"Prediction-key": config.PREDICTION_KEY})
+            self.predictor = CustomVisionPredictionClient(config.PRED_ENDPOINT, prediction_credentials)
+            print("✓ Custom Vision client initialized")
+        except Exception as e:
+            print(f"❌ Custom Vision setup failed: {e}")
+            raise
         
         # Speech setup
         print("Setting up Speech Service...")
-        self.speech_config = speechsdk.SpeechConfig(
-            subscription=config.SPEECH_KEY, 
-            region=config.SPEECH_REGION
-        )
-        self.speech_config.speech_synthesis_voice_name = "en-US-AriaNeural"
-        self.speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config)
+        try:
+            self.speech_config = speechsdk.SpeechConfig(
+                subscription=config.SPEECH_KEY, 
+                region=config.SPEECH_REGION
+            )
+            self.speech_config.speech_synthesis_voice_name = "en-US-AriaNeural"
+            self.speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config)
+            print("✓ Speech service initialized")
+        except Exception as e:
+            print(f"❌ Speech service setup failed: {e}")
+            raise
         
         # Translation variables
         self.current_prediction = ""
         self.prediction_confidence = 0.0
         self.last_spoken = ""
-        self.speak_threshold = config.CONFIDENCE_THRESHOLD
+        self.speak_threshold = getattr(config, 'CONFIDENCE_THRESHOLD', 0.7)
         self.word_buffer = []
         self.last_prediction_time = time.time()
         self.is_speaking = False
+        self.paused = False
         
         # Camera setup
         print("Setting up camera...")
-        self.cap = cv2.VideoCapture(config.CAMERA_INDEX)
-        if not self.cap.isOpened():
-            raise Exception("❌ Could not open camera")
+        try:
+            camera_index = getattr(config, 'CAMERA_INDEX', 0)
+            self.cap = cv2.VideoCapture(camera_index)
+            if not self.cap.isOpened():
+                raise Exception(f"Could not open camera at index {camera_index}")
+                
+            frame_width = getattr(config, 'FRAME_WIDTH', 640)
+            frame_height = getattr(config, 'FRAME_HEIGHT', 480)
             
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+            print(f"✓ Camera initialized ({frame_width}x{frame_height})")
+        except Exception as e:
+            print(f"❌ Camera setup failed: {e}")
+            raise
         
         print("✓ ASL Translator initialized successfully!")
         
     def validate_config(self):
         """Validate configuration settings"""
         required_fields = [
-            ('PREDICTION_KEY', config.PREDICTION_KEY),
-            ('ENDPOINT', config.ENDPOINT),
-            ('PROJECT_ID', config.PROJECT_ID),
-            ('SPEECH_KEY', config.SPEECH_KEY),
-            ('SPEECH_REGION', config.SPEECH_REGION)
+            'PREDICTION_KEY',
+            'PRED_ENDPOINT', 
+            'PROJECT_ID',
+            'SPEECH_KEY',
+            'SPEECH_REGION'
         ]
         
-        for field_name, field_value in required_fields:
-            if not field_value or field_value.startswith("YOUR_"):
-                raise Exception(f"❌ Please set {field_name} in config.py")
+        missing_fields = []
+        for field_name in required_fields:
+            if not hasattr(config, field_name):
+                missing_fields.append(field_name)
+            else:
+                field_value = getattr(config, field_name)
+                if not field_value or str(field_value).startswith("YOUR_"):
+                    missing_fields.append(field_name)
+        
+        if missing_fields:
+            raise Exception(f"❌ Missing or invalid config fields: {', '.join(missing_fields)}")
+        
+        print("✓ Configuration validated")
         
     def preprocess_image(self, frame):
         """Preprocess the frame for better prediction"""
@@ -70,8 +100,9 @@ class ASLTranslator:
             # Convert BGR to RGB
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-            # Resize to model input size
-            resized = cv2.resize(rgb_frame, config.IMAGE_SIZE)
+            # Get image size from config or use default
+            image_size = getattr(config, 'IMAGE_SIZE', (224, 224))
+            resized = cv2.resize(rgb_frame, image_size)
             
             # Apply some preprocessing for better recognition
             # Normalize brightness
@@ -93,15 +124,18 @@ class ASLTranslator:
             return image_buffer
             
         except Exception as e:
-            print(f"Preprocessing error: {e}")
+            print(f"❌ Preprocessing error: {e}")
             return None
         
     def predict_gesture(self, image_buffer):
         """Predict ASL gesture using Custom Vision"""
         try:
+            # Get published model name from config or use default
+            published_name = getattr(config, 'PUBLISHED_MODEL_NAME', 'Iteration1')
+            
             results = self.predictor.classify_image(
                 config.PROJECT_ID, 
-                config.PUBLISHED_MODEL_NAME, 
+                published_name, 
                 image_buffer.getvalue()
             )
             
@@ -113,8 +147,10 @@ class ASLTranslator:
         except Exception as e:
             if "NotFound" in str(e):
                 print("❌ Model not found. Make sure you've trained and published the model.")
+                print(f"   Project ID: {config.PROJECT_ID}")
+                print(f"   Published Name: {getattr(config, 'PUBLISHED_MODEL_NAME', 'Iteration1')}")
             else:
-                print(f"Prediction error: {e}")
+                print(f"❌ Prediction error: {e}")
             
         return None, 0.0
         
@@ -143,12 +179,12 @@ class ASLTranslator:
                 print(f"🔊 Spoke: {text}")
             elif result.reason == speechsdk.ResultReason.Canceled:
                 cancellation_details = result.cancellation_details
-                print(f"Speech synthesis canceled: {cancellation_details.reason}")
+                print(f"❌ Speech synthesis canceled: {cancellation_details.reason}")
                 if cancellation_details.error_details:
-                    print(f"Error details: {cancellation_details.error_details}")
+                    print(f"   Error details: {cancellation_details.error_details}")
                 
         except Exception as e:
-            print(f"Speech error: {e}")
+            print(f"❌ Speech error: {e}")
         finally:
             self.is_speaking = False
             
@@ -160,9 +196,12 @@ class ASLTranslator:
             self.current_prediction = prediction
             self.prediction_confidence = confidence
             
+            # Get prediction delay from config or use default
+            prediction_delay = getattr(config, 'PREDICTION_DELAY', 1.0)
+            
             # Add to word buffer if it's a new prediction
             if (prediction != self.last_spoken and 
-                current_time - self.last_prediction_time > config.PREDICTION_DELAY):
+                current_time - self.last_prediction_time > prediction_delay):
                 
                 self.word_buffer.append(prediction)
                 self.last_prediction_time = current_time
@@ -234,4 +273,126 @@ class ASLTranslator:
         print("  SPACE - Pause/Resume recognition")
         print("=" * 50)
         
+        frame_count = 0
+        prediction_interval = 10  # Predict every N frames to reduce API calls
         
+        try:
+            while True:
+                ret, frame = self.cap.read()
+                if not ret:
+                    print("❌ Failed to read from camera")
+                    break
+                
+                # Draw interface
+                frame, hand_region = self.draw_interface(frame)
+                
+                # Process prediction every N frames and when not paused
+                if frame_count % prediction_interval == 0 and not self.paused:
+                    # Extract hand region for prediction
+                    x1, y1, x2, y2 = hand_region
+                    hand_frame = frame[y1:y2, x1:x2]
+                    
+                    # Preprocess and predict
+                    image_buffer = self.preprocess_image(hand_frame)
+                    if image_buffer:
+                        prediction, confidence = self.predict_gesture(image_buffer)
+                        
+                        if prediction and confidence > 0.1:  # Show low confidence predictions too
+                            print(f"📋 Detected: {prediction} (confidence: {confidence:.3f})")
+                            
+                            # Process high confidence predictions
+                            if confidence > self.speak_threshold:
+                                self.process_prediction(prediction, confidence)
+                            else:
+                                # Update display even for low confidence
+                                self.current_prediction = f"{prediction} (low)"
+                                self.prediction_confidence = confidence
+                
+                # Show pause status
+                if self.paused:
+                    cv2.putText(frame, "PAUSED", (width//2 - 50, 50), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+                
+                # Display frame
+                cv2.imshow('ASL Translator', frame)
+                
+                # Handle keyboard input
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q') or key == ord('Q'):
+                    print("\n👋 Shutting down...")
+                    break
+                elif key == ord('c') or key == ord('C'):
+                    self.word_buffer = []
+                    print("🗑️ Buffer cleared")
+                elif key == ord('s') or key == ord('S'):
+                    if self.word_buffer:
+                        word = ''.join(self.word_buffer)
+                        threading.Thread(target=self.speak_text, args=(word,), daemon=True).start()
+                        print(f"🔊 Speaking buffer: {word}")
+                    else:
+                        print("📭 Buffer is empty")
+                elif key == ord(' '):  # Spacebar
+                    self.paused = not self.paused
+                    status = "paused" if self.paused else "resumed"
+                    print(f"⏸️ Recognition {status}")
+                
+                frame_count += 1
+                
+        except KeyboardInterrupt:
+            print("\n⚠️ Interrupted by user")
+        except Exception as e:
+            print(f"❌ Runtime error: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            # Cleanup
+            print("🧹 Cleaning up...")
+            self.cap.release()
+            cv2.destroyAllWindows()
+            print("✅ Cleanup complete")
+
+def main():
+    """Main entry point"""
+    try:
+        # Test configuration first
+        print("🔧 Testing configuration...")
+        
+        # Check if config exists and has required fields
+        required_config = [
+            'PREDICTION_KEY',
+            'PRED_ENDPOINT',
+            'PROJECT_ID', 
+            'SPEECH_KEY',
+            'SPEECH_REGION'
+        ]
+        
+        missing_config = []
+        for field in required_config:
+            if not hasattr(config, field):
+                missing_config.append(field)
+            else:
+                value = getattr(config, field)
+                if not value or str(value).startswith("YOUR_"):
+                    missing_config.append(field)
+        
+        if missing_config:
+            print("❌ Configuration Error!")
+            print("Missing or invalid fields in config.py:")
+            for field in missing_config:
+                print(f"  - {field}")
+            print("\nPlease update your config.py file with valid Azure credentials.")
+            return
+        
+        print("✅ Configuration looks good!")
+        
+        # Initialize and run translator
+        translator = ASLTranslator()
+        translator.run()
+        
+    except Exception as e:
+        print(f"❌ Failed to start ASL Translator: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    main()

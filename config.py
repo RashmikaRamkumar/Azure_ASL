@@ -6,14 +6,14 @@ TRAINING_KEY = "EZ3qwQ12e0zuuuu6U0P7p0dRdiPLKjKrfLQSOXsk90KDHsmAMRucJQQJ99BEACYe
 PREDICTION_KEY = "CniUcwEAI6sqDtHfLwtjmY9XRvZ3hc4kBQIOaXk15XUryu5Rtqf7JQQJ99BEACYeBjFXJ3w3AAAIACOGz48A"  # From asl-customvision-prediction resource
 ENDPOINT = "https://asltrain.cognitiveservices.azure.com/"  # From training resource (e.g., https://eastus.api.cognitive.microsoft.com/)
 PREDICTION_RESOURCE_ID = "/subscriptions/dbc68e33-eadd-4766-9e31-f0a1ca8f7ec3/resourceGroups/resource1/providers/Microsoft.CognitiveServices/accounts/asl-customvision-prediction"  # Full resource ID from prediction resource properties
-
+PRED_ENDPOINT="https://asl-customvision-prediction.cognitiveservices.azure.com"
 # Azure Speech Service Configuration  
 SPEECH_KEY = "Ae4IRMaxROuc3n5q8tMeliYsMyTulDeeprDJq3pcFQU8AanOMhAcJQQJ99BEACYeBjFXJ3w3AAAYACOGqFuh"  # From asl-speech-service resource
 SPEECH_REGION = "eastus"  # e.g., "eastus", "westus2"
 
 # Project Configuration (will be filled after training)
 PROJECT_ID = "aaa4f0e5-d011-45c7-9018-7377d97b7455"  # Will be generated during training
-PUBLISHED_MODEL_NAME = "ASL_Model_v1"
+PUBLISHED_MODEL_NAME = "Iteration2"
 
 # Dataset Configuration
 DATASET_PATH = r"D:\Azure_project\asl_dataset"  # Update this path
