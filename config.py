@@ -12,7 +12,7 @@ SPEECH_KEY = "Ae4IRMaxROuc3n5q8tMeliYsMyTulDeeprDJq3pcFQU8AanOMhAcJQQJ99BEACYeBj
 SPEECH_REGION = "eastus"  # e.g., "eastus", "westus2"
 
 # Project Configuration (will be filled after training)
-PROJECT_ID = "700de036-0ebe-4484-94ce-028f7b6f9e6b"  # Will be generated during training
+PROJECT_ID = "aaa4f0e5-d011-45c7-9018-7377d97b7455"  # Will be generated during training
 PUBLISHED_MODEL_NAME = "ASL_Model_v1"
 
 # Dataset Configuration
@@ -29,8 +29,7 @@ FRAME_HEIGHT = 480
 
 
 #==================================================
-# ✓ Project ID: 700de036-0ebe-4484-94ce-028f7b6f9e6b
-# ✓ Iteration ID: 44ba103d-25b8-425e-85eb-788f25acb153
+#✓ Training started. Iteration ID: a1e3ff98-bd83-4db9-9385-349849658c08
 #==================================================
 
 # Example of what your keys should look like:
